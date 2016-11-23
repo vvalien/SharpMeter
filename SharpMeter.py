@@ -328,8 +328,8 @@ if __name__ == '__main__':
     print("A Simple Way To Make Meterpreter Reverse Payloads\n")
     parser = argparse.ArgumentParser(usage="%s LHOST LPORT CompileMe.cs <tcp/http/https>\n" % sys.argv[0])
     parser.add_argument('-w', action='store_true', default=False, dest='window', help='AutoClose Console Window')
-    parser.add_argument('-x', action='store_true', default=False, dest='xor', help='XOR the URL')
     parser.add_argument('-a', action='store_true', default=False, dest='app', help='Applocker Bypass')
+    parser.add_argument('-x', action='store_true', default=False, dest='xor', help='XOR the URL')
     parser.add_argument('-m', action='store_true', default=False, dest='mbuild', help='MSBuild File!')
     parser.add_argument('-d', action='store_true', default=False, dest='debug', help='Debuging to true')
     if len(sys.argv) < 5:
