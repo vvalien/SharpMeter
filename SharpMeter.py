@@ -1,5 +1,13 @@
 #!/usr/bin/python
 # None of this would be possible without the work from @harmj0y and veil-framework
+# Also @cneeliz for testing and deugging my shit code.
+# This is smokeware, it's like beerware but I don't drink =]
+# TODO: add option for command line url, ie CompileMe.exe http://192.168.1.101:443
+# TODO: shellcode stub input, ie SharpMeter.py embed 0011333377DDEEAADDBBEEAAFF
+# TODO: info on hosting msbuild files
+# TODO: fix the debugging names.
+# TODO: HostHeaders/SSL...
+# no bugs reports = awesome, or your lazy...
 import random
 import sys
 import argparse
