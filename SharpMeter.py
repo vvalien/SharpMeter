@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# None of this would be possible without the work from @harmj0y and veil-framework
 import random
 import sys
 import argparse
