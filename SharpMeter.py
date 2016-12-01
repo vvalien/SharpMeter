@@ -526,10 +526,10 @@ if __name__ == '__main__':
         print("I.E. tcp, http, or https \n")
         sys.exit(0)
     if EMBED:
-		if MSBUILD:
-			closing = finish_msbuild().format(output_file.split('.')[0], output_file.split('.')[1])
-		else:
-			closing = finish_csc().format(output_file.split('.')[0])
+        if MSBUILD:
+            closing = finish_msbuild().format(output_file.split('.')[0], output_file.split('.')[1])
+        else:
+            closing = finish_csc().format(output_file.split('.')[0])
     elif MSBUILD:
         closing = finish_msf().format(reverse_method, LPORT)
         closing += finish_msbuild().format(output_file.split('.')[0], output_file.split('.')[1])
@@ -537,4 +537,3 @@ if __name__ == '__main__':
         closing = finish_msf().format(reverse_method, LPORT)
         closing += finish_csc().format(output_file.split('.')[0])
     print(closing)
-   
